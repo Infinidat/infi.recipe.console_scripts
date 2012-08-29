@@ -28,9 +28,14 @@ SETUP_INFO = dict(
     include_package_data = True,
     zip_safe = False,
 
-    entry_points = dict(
-        console_scripts = ${project:console_scripts},
-        gui_scripts = []),
+    entry_points = {
+        'distutils.commands': ['install = infi.recipe.console_scripts:install', ],
+        'console_scripts': ${project:console_scripts},
+        'gui_scripts': [],
+        'zc.buildout': ['default = ${project:name}:Scripts',
+                        'script = ${project:name}:Scripts',
+                        'scripts = ${project:name}:Scripts']
+        }
     )
 
 def setup():
