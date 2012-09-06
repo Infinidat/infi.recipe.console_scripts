@@ -1,7 +1,7 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
 import os
-import z3c.recipe.scripts
+import zc.recipe.egg
 import sys
 import os
 import shutil
@@ -107,7 +107,7 @@ class AbsoluteExecutablePathMixin(object):
             buildout_directory = self.buildout.get('buildout').get('buildout-directory', curdir)
             self.options['executable'] = path.abspath(path.join(buildout_directory, self.options.get('executable')))
 
-class Scripts(z3c.recipe.scripts.Scripts, AbsoluteExecutablePathMixin):
+class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
         func = super(Scripts, self).install
         require = self.options.get('require-administrative-privileges', True)
