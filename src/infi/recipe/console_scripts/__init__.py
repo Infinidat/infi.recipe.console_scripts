@@ -67,7 +67,7 @@ def write_manifest(filepath, with_vc90=True, with_uac=True):
                                  vc90=MANIFEST_VC90 if with_vc90 else ''))
 
 def executable_filter(filepath):
-    return filepath.endswith('exe') and is_distribute_launcher(filepath) and not is_buildout_launcher(filepath)
+    return filepath.endswith('exe') and 'buildout' not in filepath
 
 def write_vc90_crt_private_assembly(dirpath):
     assembly_basedir = os.path.join(dirpath, 'Microsoft.VC90.CRT')
