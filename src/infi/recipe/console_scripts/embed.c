@@ -242,7 +242,7 @@ char* get_python_exe(const char* python_home) {
     char python_exe_path[MAX_PATH];
     strcpy(python_exe_path, python_home);
     strcat(python_exe_path, PYTHON_EXE_PATH_PART);
-
+    return python_exe_path;
 }
 
 void load_python_library(const char* python_home) {
