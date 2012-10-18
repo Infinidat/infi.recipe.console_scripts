@@ -30,7 +30,9 @@ void (*__Py_Finalize)(void);
 void (*__PyErr_Print)(void);
 int (*__Py_MakePendingCalls)(void);
 int (*__PyModule_AddStringConstant)(PyObject*, const char*, const char*);
+int (*__PySys_SetObject)(char* name, PyObject* v);
 PyObject* (*__PyImport_AddModule)(const char*);
+PyObject* (*__PyString_FromString)(const char*);
 int (*__PyRun_SimpleString)(const char*);
 
 void error(const char* fmt, ...){
@@ -89,7 +91,7 @@ long get_file_size(FILE* fp) {
     if (fseek(fp, 0, SEEK_END) != 0) {
         goto error;
     }
-    
+
     file_size = ftell(fp);
     if (file_size == -1) {
         goto error;
@@ -98,7 +100,7 @@ long get_file_size(FILE* fp) {
     if (fseek(fp, cur_pos, SEEK_SET) != 0) {
         goto error;
     }
-    
+
     return file_size;
 
 error:
@@ -115,16 +117,16 @@ char* read_file(const char* filename) {
     if ((fp = fopen(filename, "rb")) == NULL) {
         posix_error("can't open file '%s'", filename);
     }
-    
+
     /* XXX: does this work on Win/Win64? (see posix_fstat) */
     if (fstat(fileno(fp), &sb) == 0 && S_ISDIR(sb.st_mode)) {
         error("'%s' is a directory, cannot continue");
     }
 
     file_size = get_file_size(fp);
-    
+
     buf = (char*) myalloc("file buffer", file_size + 1);
-    
+
     bytes_read = fread(buf, 1, file_size, fp);
     if (bytes_read != file_size) {
         error("read error from file '%s', read %ld bytes out of %ld", filename, bytes_read, file_size);
@@ -132,7 +134,7 @@ char* read_file(const char* filename) {
     buf[bytes_read] = 0;
 
     fclose(fp);
-    
+
     return buf;
 }
 
@@ -145,19 +147,19 @@ char* create_script_file_path_from_executable() {
     int filename_size;
     filename_size = GetModuleFileNameA(NULL, filename, MAX_PATH);
     filename[filename_size]='\x00';
-    
+
     ext_ptr = strrchr(filename, '.');
     if (ext_ptr == NULL) {
         /* No extension, so use the entire path. */
         ext_ptr = filename + strlen(filename);
     }
-    
+
     prefix_len = ext_ptr - filename;
     script_file_path = (char*) myalloc("script file name", prefix_len + strlen(PYTHON_SCRIPT_SUFFIX) + 1);
     strncpy(script_file_path, filename, prefix_len);
     script_file_path[prefix_len] = '\x00';
     strcat(script_file_path, PYTHON_SCRIPT_SUFFIX);
-    
+
     return script_file_path;
 }
 
@@ -181,13 +183,13 @@ char* find_python_home_from_shebang(const char* filename, char* buffer) {
     if (eol == NULL || ptr[0] != '#' || ptr[1] != '!') {
         error("cannot find shebang line in file '%s'", filename);
     }
-    
+
     if (*(eol - 1) == '\r') { /* We know eol - ptr > 2 */
         eol--;
     }
-    
+
     ptr += 2; /* skip the #! */
-    
+
     /* skip quotes if there are any */
     if (*ptr == '"') {
         ++ptr;
@@ -202,7 +204,7 @@ char* find_python_home_from_shebang(const char* filename, char* buffer) {
             eol = eos;
         }
     }
-    
+
     dir_ptr = str_back_path(ptr, eol);
     if (dir_ptr == NULL || dir_ptr == ptr) {
         /* the shebang line was something like: #!python.exe or #!\python.exe */
@@ -229,18 +231,27 @@ void find_dll_function(HMODULE handle, const char* func_name, void** addr) {
     if (proc == NULL) {
         win32_error("cannot find function '%s' in DLL", func_name);
     }
-    
+
     *addr = (void*) proc;
 }
 
 #define PYTHON_DLL_PATH_PART "/bin/python27.dll"
+#define PYTHON_EXE_PATH_PART "\\bin\\python.exe"
+
+char* get_python_exe(const char* python_home) {
+    char python_exe_path[MAX_PATH];
+    strcpy(python_exe_path, python_home);
+    strcat(python_exe_path, PYTHON_EXE_PATH_PART);
+    return python_exe_path;
+}
+
 void load_python_library(const char* python_home) {
     HMODULE module;
     char python_dll_path[MAX_PATH];
-    
+
     strcpy(python_dll_path, python_home);
     strcat(python_dll_path, PYTHON_DLL_PATH_PART);
-    
+
     module = LoadLibrary(python_dll_path);
     if (module == NULL) {
         win32_error("error loading python DLL from '%s'", python_dll_path);
@@ -259,6 +270,8 @@ void load_python_library(const char* python_home) {
     SET_DLL_FUNC(PyModule_AddStringConstant);
     SET_DLL_FUNC(PyImport_AddModule);
     SET_DLL_FUNC(PyRun_SimpleString);
+    SET_DLL_FUNC(PyString_FromString);
+    SET_DLL_FUNC(PySys_SetObject);
 
     /* We keep a reference to the DLL open, so it won't get removed. */
 }
@@ -275,7 +288,7 @@ int main(int argc, char **argv) {
     filename = create_script_file_path_from_executable();
 
     file_buffer = read_file(filename);
-    
+
     python_home = find_python_home_from_shebang(filename, file_buffer);
 
     load_python_library(python_home);
@@ -290,6 +303,7 @@ int main(int argc, char **argv) {
     (*__Py_Initialize)();
 
     (*__PySys_SetArgv)(argc, argv);
+    (*__PySys_SetObject)("executable", (*__PyString_FromString)(get_python_exe(python_home)));
 
     /* call pending calls like signal handlers (SIGINT) */
     if ((*__Py_MakePendingCalls)() == -1) {
@@ -306,7 +320,7 @@ int main(int argc, char **argv) {
      */
 
     (*__Py_Finalize)();
-    
+
     free(python_home);
     free(file_buffer);
     free(filename);
