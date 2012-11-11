@@ -81,7 +81,7 @@ class Workaround(object):
         def callee(*args, **kwargs):
             installed_files = func(*args, **kwargs)
             for filepath in filter(executable_filter, installed_files):
-                replace_launcher(filepath, self.gui)
+                replace_launcher(filepath, self._gui)
                 write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
                 write_vc90_crt_private_assembly(os.path.dirname(filepath))
             return installed_files
