@@ -6,6 +6,7 @@ import sys
 import os
 import shutil
 from infi.pyutils.decorators import wraps
+from infi.pyutils.contexts import contextmanager
 from pkg_resources import resource_stream, resource_filename
 
 is_64 = sys.maxsize > 2**32
@@ -107,12 +108,26 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
 
     update = install
 
+@contextmanager
+def patch_get_entry_map_for_gui_scripts():
+    from pkg_resources import get_entry_map as _get_entry_map
+    def get_entry_map(dist, group=None):
+        return _get_entry_map(dist, "gui_scripts")
+    import pkg_resources
+    pkg_resources.get_entry_map = get_entry_map
+    try:
+        yield
+    finally:
+        pkg_resources.get_entry_map = _get_entry_map
+
+
 class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
-        func = super(Scripts, self).install
-        require = self.options.get('require-administrative-privileges', True)
-        self.set_executable_path()
-        return Workaround(require, True)(func)()
+        with patch_get_entry_map_for_gui_scripts():
+            func = super(Scripts, self).install
+            require = self.options.get('require-administrative-privileges', True)
+            self.set_executable_path()
+            return Workaround(require, True)(func)()
 
     update = install
 

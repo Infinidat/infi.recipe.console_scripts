@@ -31,7 +31,7 @@ SETUP_INFO = dict(
     entry_points = {
         'distutils.commands': ['install = infi.recipe.console_scripts:install', ],
         'console_scripts': ${project:console_scripts},
-        'gui_scripts': [],
+        'gui_scripts': ['gui-script-test = infi.recipe.console_scripts:nothing'],
         'zc.buildout': ['default = ${project:name}:Scripts',
                         'script = ${project:name}:Scripts',
                         'scripts = ${project:name}:Scripts',
