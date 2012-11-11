@@ -34,7 +34,9 @@ SETUP_INFO = dict(
         'gui_scripts': [],
         'zc.buildout': ['default = ${project:name}:Scripts',
                         'script = ${project:name}:Scripts',
-                        'scripts = ${project:name}:Scripts']
+                        'scripts = ${project:name}:Scripts,',
+                        'gui_script = ${project:name}:GuiScripts',
+                        'gui_scripts = ${project:name}:GuiScripts',]
         }
     )
 

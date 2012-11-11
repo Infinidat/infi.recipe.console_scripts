@@ -12,7 +12,7 @@ is_64 = sys.maxsize > 2**32
 arch = 'x64' if is_64 else 'x86'
 distribute_launcher = resource_stream('setuptools', 'cli-{}.exe'.format('64' if is_64 else '32')).read()
 embedded_launcher = resource_stream(__name__, 'embed-{}.exe'.format(arch)).read()
-
+embedded_gui_launcher = resource_stream(__name__, 'embed-gui-{}.exe'.format(arch)).read()
 
 MICROSOFT_VC90_CRT = {
     'Microsoft.VC90.CRT.manifest': resource_filename(__name__, "Microsoft.VC90.CRT.manifest-{}".format(arch)),
@@ -50,16 +50,9 @@ MANIFEST_VC90 = \
   </dependency>
 """.format('amd64' if is_64 else 'x86')
 
-def is_distribute_launcher(filepath):
-    with open(filepath, 'rb') as fd:
-        return fd.read() == distribute_launcher
-
-def is_buildout_launcher(filepath):
-    return filepath.endswith('buildout.exe')
-
-def replace_launcher(filepath):
+def replace_launcher(filepath, gui=False):
     with open(filepath, 'wb') as fd:
-        fd.write(embedded_launcher)
+        fd.write(embedded_gui_launcher if gui else embedded_launcher)
 
 def write_manifest(filepath, with_vc90=True, with_uac=True):
     with open(filepath, 'w') as fd:
@@ -79,22 +72,20 @@ def write_vc90_crt_private_assembly(dirpath):
             shutil.copy(src, dst)
 
 class Workaround(object):
-    def __init__(self, require_administrative_privileges=True):
+    def __init__(self, require_administrative_privileges=True, gui=False):
         self._require_administrative_privileges = require_administrative_privileges
+        self._gui = gui
 
     def __call__(self, func):
         @wraps(func)
         def callee(*args, **kwargs):
             installed_files = func(*args, **kwargs)
             for filepath in filter(executable_filter, installed_files):
-                replace_launcher(filepath)
+                replace_launcher(filepath, gui)
                 write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
                 write_vc90_crt_private_assembly(os.path.dirname(filepath))
             return installed_files
         return callee
-
-def workaround(func):
-    return Workaround()(func)
 
 class AbsoluteExecutablePathMixin(object):
     def is_relative_paths_option_set(self):
@@ -113,6 +104,15 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
         require = self.options.get('require-administrative-privileges', True)
         self.set_executable_path()
         return Workaround(require)(func)()
+
+    update = install
+
+class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
+    def install(self):
+        func = super(Scripts, self).install
+        require = self.options.get('require-administrative-privileges', True)
+        self.set_executable_path()
+        return Workaround(require, True)(func)()
 
     update = install
 
