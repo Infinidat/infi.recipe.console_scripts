@@ -116,3 +116,5 @@ class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
 
     update = install
 
+def nothing():
+    pass
