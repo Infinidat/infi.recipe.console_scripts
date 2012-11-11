@@ -5,6 +5,7 @@ import zc.recipe.egg
 import sys
 import os
 import shutil
+import mock
 from infi.pyutils.decorators import wraps
 from infi.pyutils.contexts import contextmanager
 from pkg_resources import resource_stream, resource_filename
@@ -120,14 +121,22 @@ def patch_get_entry_map_for_gui_scripts():
     finally:
         pkg_resources.get_entry_map = _get_entry_map
 
+@contextmanager
+def patch_get_entry_info_for_gui_scripts():
+    import pkg_resources
+    def get_entry_info(self, group, name):
+        return self.get_entry_map("gui_scripts" if group == "console_scripts" else group).get(name)
+    with mock.patch("pkg_resources.Distribution.get_entry_info", new=get_entry_info):
+        yield
 
 class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
-            func = super(Scripts, self).install
-            require = self.options.get('require-administrative-privileges', True)
-            self.set_executable_path()
-            return Workaround(require, True)(func)()
+            with patch_get_entry_info_for_gui_scripts():
+                func = super(GuiScripts, self).install
+                require = self.options.get('require-administrative-privileges', True)
+                self.set_executable_path()
+                return Workaround(require, True)(func)()
 
     update = install
 
