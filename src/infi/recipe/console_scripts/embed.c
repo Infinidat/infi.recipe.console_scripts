@@ -276,6 +276,10 @@ void load_python_library(const char* python_home) {
     /* We keep a reference to the DLL open, so it won't get removed. */
 }
 
+int WINAPI WinMain(HINSTANCE hI, HINSTANCE hP, LPSTR lpCmd, int nShow) {
+    return main(__argc, __argv);
+}
+
 int main(int argc, char **argv) {
     int sts;
     char* filename = NULL;
