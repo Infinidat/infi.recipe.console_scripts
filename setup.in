@@ -5,7 +5,7 @@ SETUP_INFO = dict(
     author = '${infi.recipe.template.version:author}',
     author_email = '${infi.recipe.template.version:author_email}',
 
-    url = 'http://www.infinidat.com',
+    url = ${infi.recipe.template.version:homepage},
     license = 'PSF',
     description = """${project:description}""",
     long_description = """${project:long_description}""",
@@ -31,10 +31,12 @@ SETUP_INFO = dict(
     entry_points = {
         'distutils.commands': ['install = infi.recipe.console_scripts:install', ],
         'console_scripts': ${project:console_scripts},
-        'gui_scripts': [],
+        'gui_scripts': ['gui-script-test = infi.recipe.console_scripts:nothing'],
         'zc.buildout': ['default = ${project:name}:Scripts',
                         'script = ${project:name}:Scripts',
-                        'scripts = ${project:name}:Scripts']
+                        'scripts = ${project:name}:Scripts',
+                        'gui_script = ${project:name}:GuiScripts',
+                        'gui_scripts = ${project:name}:GuiScripts',]
         }
     )
 
