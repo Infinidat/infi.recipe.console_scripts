@@ -95,10 +95,9 @@ class AbsoluteExecutablePathMixin(object):
         return relative_paths in [True, 'true']
 
     def set_executable_path(self):
-        from os import path, curdir
         if not self.is_relative_paths_option_set():
-            buildout_directory = self.buildout.get('buildout').get('buildout-directory', curdir)
-            self.options['executable'] = path.abspath(path.join(buildout_directory, self.options.get('executable')))
+            python_executable = self.buildout.get('buildout').get('executable')
+            self.options['executable'] = python_executable
 
 class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
