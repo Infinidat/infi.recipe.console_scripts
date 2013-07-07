@@ -3,18 +3,23 @@ __import__("pkg_resources").declare_namespace(__name__)
 import os
 import zc.recipe.egg
 import sys
-import os
 import shutil
 import mock
 from infi.pyutils.decorators import wraps
 from infi.pyutils.contexts import contextmanager
 from pkg_resources import resource_stream, resource_filename
 
+is_windows = os.name == 'nt'
 is_64 = sys.maxsize > 2**32
 arch = 'x64' if is_64 else 'x86'
-distribute_launcher = resource_stream('setuptools', 'cli-{}.exe'.format('64' if is_64 else '32')).read()
-embedded_launcher = resource_stream(__name__, 'embed-{}.exe'.format(arch)).read()
-embedded_gui_launcher = resource_stream(__name__, 'embed-gui-{}.exe'.format(arch)).read()
+
+try:
+    distribute_launcher = resource_stream('setuptools', 'cli-{}.exe'.format('64' if is_64 else '32')).read()
+    embedded_launcher = resource_stream(__name__, 'embed-{}.exe'.format(arch)).read()
+    embedded_gui_launcher = resource_stream(__name__, 'embed-gui-{}.exe'.format(arch)).read()
+except IOError:
+    # https://bitbucket.org/pypa/setuptools/issue/1/disable-installation-of-windows-specific
+    pass
 
 MICROSOFT_VC90_CRT = {
     'Microsoft.VC90.CRT.manifest': resource_filename(__name__, "Microsoft.VC90.CRT.manifest-{}".format(arch)),
@@ -102,6 +107,8 @@ class AbsoluteExecutablePathMixin(object):
 class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
         func = super(Scripts, self).install
+        if not is_windows:
+            return func()
         require = self.options.get('require-administrative-privileges', True)
         self.set_executable_path()
         return Workaround(require)(func)()
@@ -122,7 +129,6 @@ def patch_get_entry_map_for_gui_scripts():
 
 @contextmanager
 def patch_get_entry_info_for_gui_scripts():
-    import pkg_resources
     def get_entry_info(self, group, name):
         return self.get_entry_map("gui_scripts" if group == "console_scripts" else group).get(name)
     with mock.patch("pkg_resources.Distribution.get_entry_info", new=get_entry_info):
@@ -130,6 +136,8 @@ def patch_get_entry_info_for_gui_scripts():
 
 class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
+        if not is_windows:
+            return super(GuiScripts, self).install()
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
                 func = super(GuiScripts, self).install
