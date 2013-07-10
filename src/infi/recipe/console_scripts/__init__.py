@@ -136,10 +136,10 @@ def patch_get_entry_info_for_gui_scripts():
 
 class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
     def install(self):
-        if not is_windows:
-            return super(GuiScripts, self).install()
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
+                if not is_windows:
+                    return super(GuiScripts, self).install()
                 func = super(GuiScripts, self).install
                 require = self.options.get('require-administrative-privileges', True)
                 self.set_executable_path()
