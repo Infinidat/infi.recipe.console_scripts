@@ -52,3 +52,4 @@ tmp*
 !tmp*py
 
 src/infi/recipe/console_scripts/__version__.py
+bootstrap.py
