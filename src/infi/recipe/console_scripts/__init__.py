@@ -8,6 +8,7 @@ import mock
 from infi.pyutils.decorators import wraps
 from infi.pyutils.contexts import contextmanager
 from pkg_resources import resource_stream, resource_filename
+from .lazy_imports import LazyImportsWorkaroundMixin, LazyImportMixin
 
 is_windows = os.name == 'nt'
 is_64 = sys.maxsize > 2**32
@@ -62,9 +63,10 @@ def executable_filter(filepath):
     return filepath.endswith('exe') and 'buildout' not in filepath
 
 
-class Workaround(object):
-    def __init__(self, require_administrative_privileges=True, gui=False):
-        self._require_administrative_privileges = require_administrative_privileges
+class Workaround(LazyImportsWorkaroundMixin):
+    def __init__(self, recipe, gui=False):
+        super(Workaround, self).__init__(recipe)
+        self._require_administrative_privileges = recipe.options.get('require-administrative-privileges', True)
         self._gui = gui
 
     def _replace_launcher(self, filepath, gui=False):
@@ -85,35 +87,43 @@ class Workaround(object):
             if not os.path.exists(dst):
                 shutil.copy(src, dst)
 
+    def _apply_windows_workarounds(self, installed_files):
+        if not is_windows:
+            return
+        for filepath in filter(executable_filter, installed_files):
+            self._replace_launcher(filepath, self._gui)
+            self._write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
+            self._write_vc90_crt_private_assembly(os.path.dirname(filepath))
+
     def __call__(self, func):
         @wraps(func)
         def callee(*args, **kwargs):
             installed_files = func(*args, **kwargs)
-            for filepath in filter(executable_filter, installed_files):
-                self._replace_launcher(filepath, self._gui)
-                self._write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
-                self._write_vc90_crt_private_assembly(os.path.dirname(filepath))
+            self._apply_windows_workarounds(installed_files)
+            self._apply_lazy_imports(installed_files)
             return installed_files
         return callee
 
+
 class AbsoluteExecutablePathMixin(object):
     def is_relative_paths_option_set(self):
-        relative_paths = self.options.get('relative-paths', self.buildout.get('buildout').get('relative-paths', 'false'))
+        relative_paths = self.options.get('relative-paths',
+                                          self.buildout.get('buildout').get('relative-paths', 'false'))
         return relative_paths in [True, 'true']
 
     def set_executable_path(self):
+        if not is_windows:
+            return
         if not self.is_relative_paths_option_set():
             python_executable = self.buildout.get('buildout').get('executable')
             self.options['executable'] = python_executable
 
-class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
+
+class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportMixin):
     def install(self):
         func = super(Scripts, self).install
-        if not is_windows:
-            return func()
-        require = self.options.get('require-administrative-privileges', True)
         self.set_executable_path()
-        return Workaround(require)(func)()
+        return Workaround(self, gui=False)(func)()
 
     update = install
 
@@ -138,16 +148,14 @@ def patch_get_entry_info_for_gui_scripts():
     with mock.patch("pkg_resources.Distribution.get_entry_info", new=get_entry_info):
         yield
 
-class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
+
+class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
-                if not is_windows:
-                    return super(GuiScripts, self).install()
                 func = super(GuiScripts, self).install
-                require = self.options.get('require-administrative-privileges', True)
                 self.set_executable_path()
-                return Workaround(require, True)(func)()
+                return Workaround(self, gui=True)(func)()
 
     update = install
 
