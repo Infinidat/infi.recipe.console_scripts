@@ -14,9 +14,7 @@ class AbsoluteExecutablePathMixin(object):
         return relative_paths in [True, 'true']
 
     def set_executable_path(self):
-        if not is_windows:
-            return
-        if not self.is_relative_paths_option_set():
+        if is_windows and not self.is_relative_paths_option_set():
             python_executable = self.buildout.get('buildout').get('executable')
             self.options['executable'] = python_executable
 
@@ -37,12 +35,8 @@ def patch_get_entry_map_for_gui_scripts():
     from pkg_resources import get_entry_map as _get_entry_map
     def get_entry_map(dist, group=None):
         return _get_entry_map(dist, "gui_scripts")
-    import pkg_resources
-    pkg_resources.get_entry_map = get_entry_map
-    try:
+    with mock.patch("pkg_resources.get_entry_map", new=get_entry_map):
         yield
-    finally:
-        pkg_resources.get_entry_map = _get_entry_map
 
 
 @contextmanager
