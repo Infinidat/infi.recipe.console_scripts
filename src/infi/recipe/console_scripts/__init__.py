@@ -57,40 +57,42 @@ MANIFEST_VC90 = \
   </dependency>
 """.format('amd64' if is_64 else 'x86')
 
-def replace_launcher(filepath, gui=False):
-    with open(filepath, 'wb') as fd:
-        fd.write(embedded_gui_launcher if gui else embedded_launcher)
-
-def write_manifest(filepath, with_vc90=True, with_uac=True):
-    with open(filepath, 'w') as fd:
-        fd.write(MANIFEST.format(uac=MANIFEST_UAC if with_uac else '',
-                                 vc90=MANIFEST_VC90 if with_vc90 else ''))
 
 def executable_filter(filepath):
     return filepath.endswith('exe') and 'buildout' not in filepath
 
-def write_vc90_crt_private_assembly(dirpath):
-    assembly_basedir = os.path.join(dirpath, 'Microsoft.VC90.CRT')
-    if not os.path.exists(assembly_basedir):
-        os.makedirs(assembly_basedir)
-    for filename, src in MICROSOFT_VC90_CRT.items():
-        dst = os.path.join(assembly_basedir, filename)
-        if not os.path.exists(dst):
-            shutil.copy(src, dst)
 
 class Workaround(object):
     def __init__(self, require_administrative_privileges=True, gui=False):
         self._require_administrative_privileges = require_administrative_privileges
         self._gui = gui
 
+    def _replace_launcher(self, filepath, gui=False):
+        with open(filepath, 'wb') as fd:
+            fd.write(embedded_gui_launcher if gui else embedded_launcher)
+
+    def _write_manifest(self, filepath, with_vc90=True, with_uac=True):
+        with open(filepath, 'w') as fd:
+            fd.write(MANIFEST.format(uac=MANIFEST_UAC if with_uac else '',
+                                     vc90=MANIFEST_VC90 if with_vc90 else ''))
+
+    def _write_vc90_crt_private_assembly(self, dirpath):
+        assembly_basedir = os.path.join(dirpath, 'Microsoft.VC90.CRT')
+        if not os.path.exists(assembly_basedir):
+            os.makedirs(assembly_basedir)
+        for filename, src in MICROSOFT_VC90_CRT.items():
+            dst = os.path.join(assembly_basedir, filename)
+            if not os.path.exists(dst):
+                shutil.copy(src, dst)
+
     def __call__(self, func):
         @wraps(func)
         def callee(*args, **kwargs):
             installed_files = func(*args, **kwargs)
             for filepath in filter(executable_filter, installed_files):
-                replace_launcher(filepath, self._gui)
-                write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
-                write_vc90_crt_private_assembly(os.path.dirname(filepath))
+                self._replace_launcher(filepath, self._gui)
+                self._write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
+                self._write_vc90_crt_private_assembly(os.path.dirname(filepath))
             return installed_files
         return callee
 
@@ -115,6 +117,7 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
 
     update = install
 
+
 @contextmanager
 def patch_get_entry_map_for_gui_scripts():
     from pkg_resources import get_entry_map as _get_entry_map
@@ -126,6 +129,7 @@ def patch_get_entry_map_for_gui_scripts():
         yield
     finally:
         pkg_resources.get_entry_map = _get_entry_map
+
 
 @contextmanager
 def patch_get_entry_info_for_gui_scripts():
@@ -147,5 +151,7 @@ class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
 
     update = install
 
+
+# used as entry point to gui-script-test
 def nothing():
     pass
