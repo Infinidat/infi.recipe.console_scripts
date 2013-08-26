@@ -56,22 +56,20 @@ def executable_filter(filepath):
     return filepath.endswith('exe') and 'buildout' not in filepath
 
 
-class WindowsWorkaroundMixin(object):
-    def __init__(self, recipe, gui=False):
-        super(WindowsWorkaroundMixin, self).__init__()
-        self._require_administrative_privileges = recipe.options.get('require-administrative-privileges', True)
-        self._gui = gui
-
-    def _replace_launcher(self, filepath, gui=False):
+class WindowsWorkaround(object):
+    @classmethod
+    def _replace_launcher(cls, filepath, gui=False):
         with open(filepath, 'wb') as fd:
             fd.write(embedded_gui_launcher if gui else embedded_launcher)
 
-    def _write_manifest(self, filepath, with_vc90=True, with_uac=True):
+    @classmethod
+    def _write_manifest(cls, filepath, with_vc90=True, with_uac=True):
         with open(filepath, 'w') as fd:
             fd.write(MANIFEST.format(uac=MANIFEST_UAC if with_uac else '',
                                      vc90=MANIFEST_VC90 if with_vc90 else ''))
 
-    def _write_vc90_crt_private_assembly(self, dirpath):
+    @classmethod
+    def _write_vc90_crt_private_assembly(cls, dirpath):
         assembly_basedir = os.path.join(dirpath, 'Microsoft.VC90.CRT')
         if not os.path.exists(assembly_basedir):
             os.makedirs(assembly_basedir)
@@ -80,10 +78,12 @@ class WindowsWorkaroundMixin(object):
             if not os.path.exists(dst):
                 shutil.copy(src, dst)
 
-    def _apply_windows_workarounds(self, installed_files):
+    @classmethod
+    def apply(cls, recipe, gui, installed_files):
+        require_administrative_privileges = recipe.options.get('require-administrative-privileges', True)
         if not is_windows:
             return
         for filepath in filter(executable_filter, installed_files):
-            self._replace_launcher(filepath, self._gui)
-            self._write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
-            self._write_vc90_crt_private_assembly(os.path.dirname(filepath))
+            cls._replace_launcher(filepath, gui)
+            cls._write_manifest('{}.manifest'.format(filepath), with_uac=require_administrative_privileges)
+            cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))

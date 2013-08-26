@@ -1,28 +1,10 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
-import os
 import zc.recipe.egg
 import mock
-from infi.pyutils.decorators import wraps
 from infi.pyutils.contexts import contextmanager
-from .lazy_imports import LazyImportsWorkaroundMixin, LazyImportMixin
-from .windows import WindowsWorkaroundMixin
-
-is_windows = os.name == 'nt'
-
-
-class Workaround(LazyImportsWorkaroundMixin, WindowsWorkaroundMixin):
-    def __init__(self, recipe, gui=False):
-        super(Workaround, self).__init__(recipe, gui)
-
-    def __call__(self, func):
-        @wraps(func)
-        def callee(*args, **kwargs):
-            installed_files = func(*args, **kwargs)
-            self._apply_windows_workarounds(installed_files)
-            self._apply_lazy_imports(installed_files)
-            return installed_files
-        return callee
+from .lazy_imports import LazyImportsWorkaround, LazyImportMixin
+from .windows import WindowsWorkaround, is_windows
 
 
 class AbsoluteExecutablePathMixin(object):
@@ -41,9 +23,11 @@ class AbsoluteExecutablePathMixin(object):
 
 class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportMixin):
     def install(self):
-        func = super(Scripts, self).install
         self.set_executable_path()
-        return Workaround(self, gui=False)(func)()
+        installed_files = super(Scripts, self).install()
+        WindowsWorkaround.apply(self, False, installed_files)
+        LazyImportsWorkaround.apply(self, installed_files)
+        return installed_files
 
     update = install
 
@@ -73,9 +57,11 @@ class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportM
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
-                func = super(GuiScripts, self).install
                 self.set_executable_path()
-                return Workaround(self, gui=True)(func)()
+                installed_files = super(GuiScripts, self).install()
+                WindowsWorkaround.apply(self, True, installed_files)
+                LazyImportsWorkaround.apply(self, installed_files)
+                return installed_files
 
     update = install
 

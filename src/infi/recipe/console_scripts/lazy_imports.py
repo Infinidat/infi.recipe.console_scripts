@@ -50,13 +50,9 @@ class LazyImportMixin(object):
         return get_python_script_filter(self.options.get("bin-directory"))
 
 
-class LazyImportsWorkaroundMixin(object):
-    def __init__(self, recipe, gui=False):
-        super(LazyImportsWorkaroundMixin, self).__init__(recipe, gui)
-        self._lazy_import_dict = recipe.get_lazy_import_dict()
-        self._python_script_filter = recipe.get_python_script_filter()
-
-    def _generate_lazy_import_section(self, content, lazy_imports):
+class LazyImportsWorkaround(object):
+    @classmethod
+    def _generate_lazy_import_section(cls, content, lazy_imports):
         sys_path_lines = []
         import_line = ""
         sys_exit_line = "raise ImportError"
@@ -73,23 +69,27 @@ class LazyImportsWorkaroundMixin(object):
         template_kwargs = dict(sys_path_lines=sys_path_lines, import_line=import_line, sys_exit_line=sys_exit_line)
         return LAZY_IMPORT_SECTION_TEMPLATE.format(**template_kwargs)
 
-    def _add_lazy_import_section(self, filepath, lazy_imports):
+    @classmethod
+    def _add_lazy_import_section(cls, filepath, lazy_imports):
         if is_windows and not filepath.endswith(".py"):
             return
         with open(filepath) as fd:
             content = fd.read()
-        section = self._generate_lazy_import_section(content, lazy_imports)
+        section = cls._generate_lazy_import_section(content, lazy_imports)
         content = content.replace("import sys\n", "import sys\n" + section)
         with open(filepath, 'w') as fd:
             fd.write(content)
 
-    def _apply_lazy_imports(self, installed_files):
-        if not self._lazy_import_dict:
+    @classmethod
+    def apply(cls, recipe, installed_files):
+        lazy_import_dict = recipe.get_lazy_import_dict()
+        python_script_filter = recipe.get_python_script_filter()
+        if not lazy_import_dict:
             return
-        for filepath in filter(self._python_script_filter, installed_files):
+        for filepath in filter(python_script_filter, installed_files):
             # the keys in lazy_import_dict are script names
             # the value is a list of minimal packages to try for the script specified by the key
             # so if any installed file matches a key, add the lazy import section with that list of packages
-            for key, value in self._lazy_import_dict.items():
+            for key, value in lazy_import_dict.items():
                 if key in filepath:
-                    self._add_lazy_import_section(filepath, value)
+                    cls._add_lazy_import_section(filepath, value)
