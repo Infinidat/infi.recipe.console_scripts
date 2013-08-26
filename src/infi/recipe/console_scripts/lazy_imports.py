@@ -51,7 +51,8 @@ class LazyImportMixin(object):
 
 
 class LazyImportsWorkaroundMixin(object):
-    def __init__(self, recipe):
+    def __init__(self, recipe, gui=False):
+        super(LazyImportsWorkaroundMixin, self).__init__(recipe, gui)
         self._lazy_import_dict = recipe.get_lazy_import_dict()
         self._python_script_filter = recipe.get_python_script_filter()
 
