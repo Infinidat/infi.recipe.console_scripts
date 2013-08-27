@@ -2,9 +2,9 @@ import os
 is_windows = os.name == 'nt'
 
 
-# The lazy import section tries to run the entry point with as little packages as possible in sys.path.
+# The minimal packages section tries to run the entry point with as little packages as possible in sys.path.
 # Only if this will fail (with ImportError, as there will be missing packages), it will continue with a normal run
-LAZY_IMPORT_SECTION_TEMPLATE = """
+MINIMAL_PACKAGES_SECTION_TEMPLATE = """
 sys.path[0:0] = [
 {sys_path_lines}
   ]
@@ -31,12 +31,12 @@ def get_python_script_filter(bin_dirpath):
     return func
 
 
-class LazyImportMixin(object):
-    def get_lazy_import_dict(self):
-        # format of each item in lazy-imports should be:
+class MinimalPackagesMixin(object):
+    def get_minimal_packages_dict(self):
+        # format of each item in minimal-packages should be:
         #   script_name:package1,package2,package3
-        option = self.options.get("lazy-imports",
-                                  self.buildout.get("development-scripts").get("lazy-imports", ""))
+        option = self.options.get("minimal-packages",
+                                  self.buildout.get("development-scripts").get("minimal-packages", ""))
         result = dict()
         for item in option.split():
             if ":" not in item:
@@ -50,9 +50,9 @@ class LazyImportMixin(object):
         return get_python_script_filter(self.options.get("bin-directory"))
 
 
-class LazyImportsWorkaround(object):
+class MinimalPackagesWorkaround(object):
     @classmethod
-    def _generate_lazy_import_section(cls, content, lazy_imports):
+    def _generate_minimal_packages_section(cls, content, minimal_packages):
         sys_path_lines = []
         import_line = ""
         sys_exit_line = "raise ImportError"
@@ -63,33 +63,33 @@ class LazyImportsWorkaround(object):
             if "sys.exit" in line:
                 # this is the line that runs the entry point
                 sys_exit_line = line
-            if line.startswith("  join") and any(lazy_import in line for lazy_import in lazy_imports):
+            if line.startswith("  join") and any(minimal_package in line for minimal_package in minimal_packages):
                 sys_path_lines.append(line)
         sys_path_lines = "\n".join(sys_path_lines)
         template_kwargs = dict(sys_path_lines=sys_path_lines, import_line=import_line, sys_exit_line=sys_exit_line)
-        return LAZY_IMPORT_SECTION_TEMPLATE.format(**template_kwargs)
+        return MINIMAL_PACKAGES_SECTION_TEMPLATE.format(**template_kwargs)
 
     @classmethod
-    def _add_lazy_import_section(cls, filepath, lazy_imports):
+    def _add_minimal_packages_section(cls, filepath, minimal_packages):
         if is_windows and not filepath.endswith(".py"):
             return
         with open(filepath) as fd:
             content = fd.read()
-        section = cls._generate_lazy_import_section(content, lazy_imports)
+        section = cls._generate_minimal_packages_section(content, minimal_packages)
         content = content.replace("import sys\n", "import sys\n" + section)
         with open(filepath, 'w') as fd:
             fd.write(content)
 
     @classmethod
     def apply(cls, recipe, installed_files):
-        lazy_import_dict = recipe.get_lazy_import_dict()
+        minimal_packages_dict = recipe.get_minimal_packages_dict()
         python_script_filter = recipe.get_python_script_filter()
-        if not lazy_import_dict:
+        if not minimal_packages_dict:
             return
         for filepath in filter(python_script_filter, installed_files):
-            # the keys in lazy_import_dict are script names
+            # the keys in minimal_packages_dict are script names
             # the value is a list of minimal packages to try for the script specified by the key
-            # so if any installed file matches a key, add the lazy import section with that list of packages
-            for key, value in lazy_import_dict.items():
+            # so if any installed file matches a key, add the minimal packages section with that list of packages
+            for key, value in minimal_packages_dict.items():
                 if key in filepath:
-                    cls._add_lazy_import_section(filepath, value)
+                    cls._add_minimal_packages_section(filepath, value)

@@ -3,7 +3,7 @@ __import__("pkg_resources").declare_namespace(__name__)
 import zc.recipe.egg
 import mock
 from infi.pyutils.contexts import contextmanager
-from .lazy_imports import LazyImportsWorkaround, LazyImportMixin
+from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
 
 
@@ -19,12 +19,12 @@ class AbsoluteExecutablePathMixin(object):
             self.options['executable'] = python_executable
 
 
-class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportMixin):
+class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         self.set_executable_path()
         installed_files = super(Scripts, self).install()
         WindowsWorkaround.apply(self, False, installed_files)
-        LazyImportsWorkaround.apply(self, installed_files)
+        MinimalPackagesWorkaround.apply(self, installed_files)
         return installed_files
 
     update = install
@@ -47,14 +47,14 @@ def patch_get_entry_info_for_gui_scripts():
         yield
 
 
-class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, LazyImportMixin):
+class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
                 self.set_executable_path()
                 installed_files = super(GuiScripts, self).install()
                 WindowsWorkaround.apply(self, True, installed_files)
-                LazyImportsWorkaround.apply(self, installed_files)
+                MinimalPackagesWorkaround.apply(self, installed_files)
                 return installed_files
 
     update = install
