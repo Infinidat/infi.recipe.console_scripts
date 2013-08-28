@@ -5,6 +5,8 @@ is_windows = os.name == 'nt'
 # The minimal packages section tries to run the entry point with as little packages as possible in sys.path.
 # Only if this will fail (with ImportError, as there will be missing packages), it will continue with a normal run
 MINIMAL_PACKAGES_SECTION_TEMPLATE = """
+original_sys_modules = sys.modules.keys()
+
 sys.path[0:0] = [
 {sys_path_lines}
   ]
@@ -14,7 +16,8 @@ if __name__ == '__main__':
     {import_line}
 {sys_exit_line}
   except ImportError:
-    pass
+    # clear the new, bad imports
+    [sys.modules.pop(name) for name in sys.modules.keys() if name not in original_sys_modules]
 
 """
 
