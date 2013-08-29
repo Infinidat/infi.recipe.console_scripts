@@ -29,7 +29,7 @@ def get_python_script_filter(bin_dirpath):
         if not filepath.startswith(bin_dirpath):
             return False
         if is_windows:
-            return not filepath.endswith("-script.py")
+            return filepath.endswith("-script.py")
         return True  # we just want to save us the trouble of reading windows binary files
     return func
 
@@ -38,8 +38,7 @@ class MinimalPackagesMixin(object):
     def get_minimal_packages_dict(self):
         # format of each item in minimal-packages should be:
         #   script_name:package1,package2,package3
-        option = self.options.get("minimal-packages",
-                                  self.buildout.get("development-scripts").get("minimal-packages", ""))
+        option = self.options.get("minimal-packages", "")
         result = dict()
         for item in option.split():
             if ":" not in item:
@@ -66,7 +65,8 @@ class MinimalPackagesWorkaround(object):
             if "sys.exit" in line:
                 # this is the line that runs the entry point
                 sys_exit_line = line
-            if line.startswith("  join") and any(minimal_package in line for minimal_package in minimal_packages):
+            if (line.startswith("  join") or line.startswith("  '")) \
+               and any(minimal_package in line for minimal_package in minimal_packages):
                 sys_path_lines.append(line)
         sys_path_lines = "\n".join(sys_path_lines)
         template_kwargs = dict(sys_path_lines=sys_path_lines, import_line=import_line, sys_exit_line=sys_exit_line)
