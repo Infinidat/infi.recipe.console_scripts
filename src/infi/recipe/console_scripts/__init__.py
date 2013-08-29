@@ -1,131 +1,43 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
-import os
 import zc.recipe.egg
-import sys
-import shutil
 import mock
-from infi.pyutils.decorators import wraps
 from infi.pyutils.contexts import contextmanager
-from pkg_resources import resource_stream, resource_filename
+from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
+from .windows import WindowsWorkaround, is_windows
 
-is_windows = os.name == 'nt'
-is_64 = sys.maxsize > 2**32
-arch = 'x64' if is_64 else 'x86'
-
-try:
-    distribute_launcher = resource_stream('setuptools', 'cli-{}.exe'.format('64' if is_64 else '32')).read()
-    embedded_launcher = resource_stream(__name__, 'embed-{}.exe'.format(arch)).read()
-    embedded_gui_launcher = resource_stream(__name__, 'embed-gui-{}.exe'.format(arch)).read()
-except IOError:
-    # https://bitbucket.org/pypa/setuptools/issue/1/disable-installation-of-windows-specific
-    pass
-
-MICROSOFT_VC90_CRT = {
-    'Microsoft.VC90.CRT.manifest': resource_filename(__name__, "Microsoft.VC90.CRT.manifest-{}".format(arch)),
-    'msvcm90.dll': resource_filename(__name__, "msvcm90.dll-{}".format(arch)),
-    'msvcp90.dll': resource_filename(__name__, "msvcp90.dll-{}".format(arch)),
-    'msvcr90.dll': resource_filename(__name__, "msvcr90.dll-{}".format(arch))
-}
-
-MANIFEST = \
-"""
-<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
-<assembly xmlns='urn:schemas-microsoft-com:asm.v1' manifestVersion='1.0'>
-  {uac}
-  {vc90}
-</assembly>
-"""
-
-MANIFEST_UAC = \
-"""
-  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
-    <security>
-      <requestedPrivileges>
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
-      </requestedPrivileges>
-    </security>
-  </trustInfo>
-"""
-
-MANIFEST_VC90 = \
-"""
-  <dependency>
-    <dependentAssembly>
-      <assemblyIdentity type='win32' name='Microsoft.VC90.CRT' version='9.0.21022.8' processorArchitecture='{}' publicKeyToken='1fc8b3b9a1e18e3b' />
-    </dependentAssembly>
-  </dependency>
-""".format('amd64' if is_64 else 'x86')
-
-def replace_launcher(filepath, gui=False):
-    with open(filepath, 'wb') as fd:
-        fd.write(embedded_gui_launcher if gui else embedded_launcher)
-
-def write_manifest(filepath, with_vc90=True, with_uac=True):
-    with open(filepath, 'w') as fd:
-        fd.write(MANIFEST.format(uac=MANIFEST_UAC if with_uac else '',
-                                 vc90=MANIFEST_VC90 if with_vc90 else ''))
-
-def executable_filter(filepath):
-    return filepath.endswith('exe') and 'buildout' not in filepath
-
-def write_vc90_crt_private_assembly(dirpath):
-    assembly_basedir = os.path.join(dirpath, 'Microsoft.VC90.CRT')
-    if not os.path.exists(assembly_basedir):
-        os.makedirs(assembly_basedir)
-    for filename, src in MICROSOFT_VC90_CRT.items():
-        dst = os.path.join(assembly_basedir, filename)
-        if not os.path.exists(dst):
-            shutil.copy(src, dst)
-
-class Workaround(object):
-    def __init__(self, require_administrative_privileges=True, gui=False):
-        self._require_administrative_privileges = require_administrative_privileges
-        self._gui = gui
-
-    def __call__(self, func):
-        @wraps(func)
-        def callee(*args, **kwargs):
-            installed_files = func(*args, **kwargs)
-            for filepath in filter(executable_filter, installed_files):
-                replace_launcher(filepath, self._gui)
-                write_manifest('{}.manifest'.format(filepath), with_uac=self._require_administrative_privileges)
-                write_vc90_crt_private_assembly(os.path.dirname(filepath))
-            return installed_files
-        return callee
 
 class AbsoluteExecutablePathMixin(object):
     def is_relative_paths_option_set(self):
-        relative_paths = self.options.get('relative-paths', self.buildout.get('buildout').get('relative-paths', 'false'))
+        relative_paths = self.options.get('relative-paths',
+                                          self.buildout.get('buildout').get('relative-paths', 'false'))
         return relative_paths in [True, 'true']
 
     def set_executable_path(self):
-        if not self.is_relative_paths_option_set():
+        if is_windows and not self.is_relative_paths_option_set():
             python_executable = self.buildout.get('buildout').get('executable')
             self.options['executable'] = python_executable
 
-class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
+
+class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
-        func = super(Scripts, self).install
-        if not is_windows:
-            return func()
-        require = self.options.get('require-administrative-privileges', True)
         self.set_executable_path()
-        return Workaround(require)(func)()
+        installed_files = super(Scripts, self).install()
+        WindowsWorkaround.apply(self, False, installed_files)
+        MinimalPackagesWorkaround.apply(self, installed_files)
+        return installed_files
 
     update = install
+
 
 @contextmanager
 def patch_get_entry_map_for_gui_scripts():
     from pkg_resources import get_entry_map as _get_entry_map
     def get_entry_map(dist, group=None):
         return _get_entry_map(dist, "gui_scripts")
-    import pkg_resources
-    pkg_resources.get_entry_map = get_entry_map
-    try:
+    with mock.patch("pkg_resources.get_entry_map", new=get_entry_map):
         yield
-    finally:
-        pkg_resources.get_entry_map = _get_entry_map
+
 
 @contextmanager
 def patch_get_entry_info_for_gui_scripts():
@@ -134,18 +46,20 @@ def patch_get_entry_info_for_gui_scripts():
     with mock.patch("pkg_resources.Distribution.get_entry_info", new=get_entry_info):
         yield
 
-class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin):
+
+class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
-                if not is_windows:
-                    return super(GuiScripts, self).install()
-                func = super(GuiScripts, self).install
-                require = self.options.get('require-administrative-privileges', True)
                 self.set_executable_path()
-                return Workaround(require, True)(func)()
+                installed_files = super(GuiScripts, self).install()
+                WindowsWorkaround.apply(self, True, installed_files)
+                MinimalPackagesWorkaround.apply(self, installed_files)
+                return installed_files
 
     update = install
 
+
+# used as entry point to gui-script-test
 def nothing():
     pass
