@@ -80,10 +80,11 @@ class WindowsWorkaround(object):
 
     @classmethod
     def apply(cls, recipe, gui, installed_files):
-        require_administrative_privileges = recipe.options.get('require-administrative-privileges', True)
+        require_administrative_privileges = recipe.options.get('require-administrative-privileges', 'false')
+        with_uac = require_administrative_privileges in (True, "true")
         if not is_windows:
             return
         for filepath in filter(executable_filter, installed_files):
             cls._replace_launcher(filepath, gui)
-            cls._write_manifest('{}.manifest'.format(filepath), with_uac=require_administrative_privileges)
+            cls._write_manifest('{}.manifest'.format(filepath), with_uac=with_uac)
             cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))
