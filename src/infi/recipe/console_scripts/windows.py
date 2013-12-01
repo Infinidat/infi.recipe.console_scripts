@@ -105,5 +105,5 @@ class WindowsWorkaround(object):
 def write_manifest_script():
     from sys import argv
     [_, filename] = argv
-    WindowsWorkaround._write_manifest(filename)
+    WindowsWorkaround._write_manifest('{}.manifest'.format(filename))
 
