@@ -112,12 +112,12 @@ def _replace_script(gui):
     if not is_windows:
         return
     [_, filename, admin_required] = sys.argv
-    basenames = [os.path.basename(filename), os.path.basename(filename) + ".exe"]
-    files = list(basenames)
-    files.extend([os.path.join(dirname, basenames[0]) for dirname in os.environ.get("PATH", "").split(os.path.sep)])
-    files.extend([os.path.join(dirname, basenames[1]) for dirname in os.environ.get("PATH", "").split(os.path.sep)])
-    filepath = [item for item in files if os.path.exists(item)][0]
-    WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, [filepath])
+    filename = filename if filename.endswith(".exe") else filename + ".exe"
+    basename = os.path.basename(filename)
+    files = [filename, basename]
+    files.extend([os.path.join(dirname, basename) for dirname in os.environ.get("PATH", "").split(os.pathsep)])
+    files = [item for item in files if os.path.exists(item)]
+    WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, files[:1])
 
 
 def replace_console_script():
