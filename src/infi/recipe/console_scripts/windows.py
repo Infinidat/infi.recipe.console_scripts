@@ -108,15 +108,15 @@ class CommandlineWorkaround(object):
         self.options = {"require-administrative-privileges": admin_required}
 
 
-def _apply_script(gui):
+def _replace_script(gui):
     from sys import argv
     [_, filename, admin_required] = argv
     WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, [filename])
 
 
-def apply_console_script():
-  _apply_script(False)
+def replace_console_script():
+  _replace_script(False)
 
 
-def apply_gui_script():
-  _apply_script(True)
+def replace_gui_script():
+  _replace_script(True)
