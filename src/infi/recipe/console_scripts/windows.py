@@ -102,8 +102,21 @@ class WindowsWorkaround(object):
             cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))
 
 
-def write_manifest_script():
-    from sys import argv
-    [_, filename] = argv
-    WindowsWorkaround._write_manifest('{}.manifest'.format(filename))
+class CommandlineWorkaround(object):
+    def __init__(self, admin_required):
+        super(CommandlineWorkaround, self).__init__()
+        self.options = {"require-administrative-privileges": admin_required}
 
+
+def _apply_script(gui):
+    from sys import argv
+    [_, filename, admin_required] = argv
+    WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, [filename])
+
+
+def apply_console_script():
+  _apply_script(False)
+
+
+def apply_gui_script():
+  _apply_script(True)
