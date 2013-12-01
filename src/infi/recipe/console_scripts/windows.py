@@ -100,3 +100,10 @@ class WindowsWorkaround(object):
             cls._replace_launcher(filepath, gui)
             cls._write_manifest('{}.manifest'.format(filepath), with_uac=with_uac)
             cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))
+
+
+def write_manifest_script():
+    from sys import argv
+    [_, filename] = argv
+    WindowsWorkaround._write_manifest(filename)
+
