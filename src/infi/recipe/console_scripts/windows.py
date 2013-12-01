@@ -109,8 +109,10 @@ class CommandlineWorkaround(object):
 
 
 def _replace_script(gui):
-    from sys import argv
-    [_, filename, admin_required] = argv
+    if not is_windows:
+        return
+    [_, filename, admin_required] = sys.argv
+    filename = filename if filename.endswith(".exe") else filename + ".exe"
     WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, [filename])
 
 
