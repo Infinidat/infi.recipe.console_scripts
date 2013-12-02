@@ -28,6 +28,18 @@ MANIFEST = \
 <assembly xmlns='urn:schemas-microsoft-com:asm.v1' manifestVersion='1.0'>
   {uac}
   {vc90}
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"> 
+    <application> 
+      <!-- Windows 8.1 -->
+      <supportedOS Id="{{1f676c76-80e1-4239-95bb-83d0f6d0da78}}"/>
+      <!-- Windows Vista -->
+      <supportedOS Id="{{e2011457-1546-43c5-a5fe-008deee3d3f0}}"/> 
+      <!-- Windows 7 -->
+      <supportedOS Id="{{35138b9a-5d96-4fbd-8e2d-a2440225f93a}}"/>
+      <!-- Windows 8 -->
+      <supportedOS Id="{{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}}"/>
+    </application> 
+  </compatibility>  
 </assembly>
 """
 
@@ -88,3 +100,29 @@ class WindowsWorkaround(object):
             cls._replace_launcher(filepath, gui)
             cls._write_manifest('{}.manifest'.format(filepath), with_uac=with_uac)
             cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))
+
+
+class CommandlineWorkaround(object):
+    def __init__(self, admin_required):
+        super(CommandlineWorkaround, self).__init__()
+        self.options = {"require-administrative-privileges": admin_required}
+
+
+def _replace_script(gui):
+    if not is_windows:
+        return
+    [_, filename, admin_required] = sys.argv
+    filename = filename if filename.endswith(".exe") else filename + ".exe"
+    basename = os.path.basename(filename)
+    files = [filename, basename]
+    files.extend([os.path.join(dirname, basename) for dirname in os.environ.get("PATH", "").split(os.pathsep)])
+    files = [item for item in files if os.path.exists(item)]
+    WindowsWorkaround.apply(CommandlineWorkaround(admin_required in ("1", "True", "true")), gui, files[:1])
+
+
+def replace_console_script():
+  _replace_script(False)
+
+
+def replace_gui_script():
+  _replace_script(True)
