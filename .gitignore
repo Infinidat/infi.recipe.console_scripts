@@ -55,3 +55,4 @@ src/infi/recipe/console_scripts/__version__.py
 bootstrap.py
 .cache
 eggs
+parts
