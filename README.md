@@ -1,10 +1,11 @@
 Overview
 ========
-This repository is just a skeleton we use for projects.
 
-Usage
------
-Nothing to use here.
+This is a buildout recipe that extends `zc.recipe.egg`, by adding the following features:
+
+* write application manifests when running on Windows
+* support for adding a smaller set of python packages to `sys.path`, so calling `<executable> --help` will load faster
+
 
 Checking out the code
 =====================
