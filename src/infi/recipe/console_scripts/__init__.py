@@ -1,8 +1,8 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
 import zc.recipe.egg
-import mock
 from infi.pyutils.contexts import contextmanager
+from infi.pyutils.patch import patch
 from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
 
@@ -32,18 +32,24 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackage
 
 @contextmanager
 def patch_get_entry_map_for_gui_scripts():
-    from pkg_resources import get_entry_map as _get_entry_map
+    import pkg_resources
+    _get_entry_map = pkg_resources.get_entry_map
+
     def get_entry_map(dist, group=None):
         return _get_entry_map(dist, "gui_scripts")
-    with mock.patch("pkg_resources.get_entry_map", new=get_entry_map):
+
+    with patch(pkg_resources, "get_entry_map", get_entry_map):
         yield
 
 
 @contextmanager
 def patch_get_entry_info_for_gui_scripts():
+    import pkg_resources
+
     def get_entry_info(self, group, name):
         return self.get_entry_map("gui_scripts" if group == "console_scripts" else group).get(name)
-    with mock.patch("pkg_resources.Distribution.get_entry_info", new=get_entry_info):
+
+    with patch(pkg_resources.Distribution, "get_entry_info", get_entry_info):
         yield
 
 
