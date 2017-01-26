@@ -3,10 +3,9 @@ is_windows = os.name == 'nt'
 
 VIRTUALENV_SECTION = """{shebang}
 import os
-{code_before}
 # When working inside a virtual environment, IPython tries to load all of the venv Python packages:
 os.environ.pop('VIRTUAL_ENV', None)
-{code_after}
+{code}
 """
 
 
@@ -25,21 +24,10 @@ def get_python_script_filter(bin_dirpath):
 class VirtualenvWorkaround(object):
     @classmethod
     def _generate_virtualenv_content(cls, content):
-        import_line = 0
-        content_lines = content.split("\n")
-        for import_line, line in enumerate(reversed(content_lines)):
-            if "import" in line:
-                # we take the last line with "import" in it, it is the import of the entry point
-                break
-        import_line = len(content_lines) - import_line
+        content_lines = content.split('\n')
         shebang = content_lines[0]
-        code_before = '\n'.join(content_lines[1:import_line - 1])
-        code_after = '\n'.join(content_lines[import_line - 1:])
-
-        template_kwargs = dict(shebang=shebang,
-                               import_line=import_line,
-                               code_before=code_before,
-                               code_after=code_after)
+        code = '\n'.join(content_lines[1:])
+        template_kwargs = dict(shebang=shebang, code=code)
         return VIRTUALENV_SECTION.format(**template_kwargs)
 
     @classmethod
