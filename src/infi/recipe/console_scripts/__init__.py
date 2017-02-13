@@ -5,6 +5,7 @@ from infi.pyutils.contexts import contextmanager
 from infi.pyutils.patch import patch
 from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
+from .virtualenv import VirtualenvWorkaround
 
 
 class AbsoluteExecutablePathMixin(object):
@@ -25,6 +26,7 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackage
         installed_files = super(Scripts, self).install()
         WindowsWorkaround.apply(self, False, installed_files)
         MinimalPackagesWorkaround.apply(self, installed_files)
+        VirtualenvWorkaround.apply(self, installed_files)
         return installed_files
 
     update = install
