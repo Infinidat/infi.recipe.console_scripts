@@ -1,8 +1,7 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
 import zc.recipe.egg
-from infi.pyutils.contexts import contextmanager
-from infi.pyutils.patch import patch
+from contextlib import contextmanager
 from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
 from .virtualenv import VirtualenvWorkaround
@@ -30,6 +29,16 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackage
         return installed_files
 
     update = install
+
+
+@contextmanager
+def patch(parent, name, value):
+    previous = getattr(parent, name, None)
+    setattr(parent, name, value)
+    try:
+        yield
+    finally:
+        setattr(parent, name, previous)
 
 
 @contextmanager
@@ -71,3 +80,21 @@ class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPack
 # used as entry point to gui-script-test
 def nothing():
     pass
+
+
+def patch_buildout_wheel():
+    import buildout.wheel
+    import glob
+    WheelInstaller = buildout.wheel.WheelInstaller
+
+    def wrapper(func):
+        def wrapper(basename):
+            print basename
+            return WheelInstaller((glob.glob('{}*'.format(basename)) + [basename])[0])
+        return wrapper
+
+    buildout.wheel.WheelInstaller = wrapper(buildout.wheel.WheelInstaller)
+
+
+# buildout.wheel on Windows is having problems installing non-lower-case wheels
+patch_buildout_wheel()
