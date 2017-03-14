@@ -97,4 +97,8 @@ def patch_buildout_wheel():
 
 
 # buildout.wheel on Windows is having problems installing non-lower-case wheels
-patch_buildout_wheel()
+try:
+    patch_buildout_wheel()
+except ImportError:
+    pass
+
