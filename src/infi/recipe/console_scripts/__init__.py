@@ -96,9 +96,31 @@ def patch_buildout_wheel():
     buildout.wheel.WheelInstaller = wrapper(buildout.wheel.WheelInstaller)
 
 
+def _get_matching_dist_in_location(dist, location):
+    """
+    Check if `locations` contain only the one intended dist.
+    Return the dist with metadata in the new location.
+    """
+    # Getting the dist from the environment causes the
+    # distribution meta data to be read.  Cloning isn't
+    # good enough.
+    import pkg_resources
+    env = pkg_resources.Environment([location])
+    dists = [ d for project_name in env for d in env[project_name] ]
+    dist_infos = [ (d.project_name, d.version) for d in dists ]
+    if dist_infos == [(dist.project_name, dist.version)]:
+        return dists.pop()
+    if dist_infos == [(dist.project_name.lower(), dist.version)]:
+        return dists.pop()
+
+def patch_zc_buildout_easy_install():
+    import zc.buildout.easy_install
+    zc.buildout.easy_install._get_matching_dist_in_location = _get_matching_dist_in_location
+
 # buildout.wheel on Windows is having problems installing non-lower-case wheels
 try:
     patch_buildout_wheel()
 except ImportError:
     pass
 
+patch_zc_buildout_easy_install()
