@@ -89,7 +89,6 @@ def patch_buildout_wheel():
 
     def wrapper(func):
         def wrapper(basename):
-            print basename
             return WheelInstaller((glob.glob('{}*'.format(basename)) + [basename])[0])
         return wrapper
 
