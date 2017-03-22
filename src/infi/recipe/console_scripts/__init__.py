@@ -1,10 +1,10 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
-import zc.recipe.egg
 from contextlib import contextmanager
 from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
 from .virtualenv import VirtualenvWorkaround
+from .egg import Scripts
 
 
 class AbsoluteExecutablePathMixin(object):
@@ -19,7 +19,7 @@ class AbsoluteExecutablePathMixin(object):
             self.options['executable'] = python_executable
 
 
-class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
+class Scripts(Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         self.set_executable_path()
         installed_files = super(Scripts, self).install()
@@ -64,7 +64,7 @@ def patch_get_entry_info_for_gui_scripts():
         yield
 
 
-class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
+class GuiScripts(Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
