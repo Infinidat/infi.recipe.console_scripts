@@ -6,8 +6,6 @@ is_windows = os.name == 'nt'
 # Only if this will fail (with ImportError, as there will be missing packages), it will continue with a normal run
 MINIMAL_PACKAGES_SECTION_TEMPLATE = """
 import pkg_resources
-original_sys_modules = sys.modules.keys()
-_namespace_packages= pkg_resources._namespace_packages.copy()
 
 sys.path[0:0] = [
 {sys_path_lines}
@@ -18,9 +16,7 @@ if __name__ == '__main__':
     {import_line}
 {sys_exit_line}
   except ImportError:
-    # clear the new, bad imports
-    [sys.modules.pop(name) for name in sys.modules.keys() if name not in original_sys_modules]
-    pkg_resources._namespace_packages = _namespace_packages
+    pass
 
 """
 
@@ -82,6 +78,7 @@ class MinimalPackagesWorkaround(object):
         with open(filepath) as fd:
             content = fd.read()
         section = cls._generate_minimal_packages_section(content, minimal_packages)
+        content = content.replace("if __name__ == '__main__':\n", "reload(pkg_resources)\nif __name__ == '__main__':\n")
         content = content.replace("import sys\n", "import sys\n" + section)
         with open(filepath, 'w') as fd:
             fd.write(content)
