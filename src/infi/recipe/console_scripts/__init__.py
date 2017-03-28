@@ -1,11 +1,10 @@
 __import__("pkg_resources").declare_namespace(__name__)
 
-import zc.recipe.egg
-from infi.pyutils.contexts import contextmanager
-from infi.pyutils.patch import patch
+from contextlib import contextmanager
 from .minimal_packages import MinimalPackagesWorkaround, MinimalPackagesMixin
 from .windows import WindowsWorkaround, is_windows
 from .virtualenv import VirtualenvWorkaround
+from .egg import Scripts
 
 
 class AbsoluteExecutablePathMixin(object):
@@ -20,7 +19,7 @@ class AbsoluteExecutablePathMixin(object):
             self.options['executable'] = python_executable
 
 
-class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
+class Scripts(Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         self.set_executable_path()
         installed_files = super(Scripts, self).install()
@@ -30,6 +29,16 @@ class Scripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackage
         return installed_files
 
     update = install
+
+
+@contextmanager
+def patch(parent, name, value):
+    previous = getattr(parent, name, None)
+    setattr(parent, name, value)
+    try:
+        yield
+    finally:
+        setattr(parent, name, previous)
 
 
 @contextmanager
@@ -55,7 +64,7 @@ def patch_get_entry_info_for_gui_scripts():
         yield
 
 
-class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
+class GuiScripts(Scripts, AbsoluteExecutablePathMixin, MinimalPackagesMixin):
     def install(self):
         with patch_get_entry_map_for_gui_scripts():
             with patch_get_entry_info_for_gui_scripts():
@@ -71,3 +80,46 @@ class GuiScripts(zc.recipe.egg.Scripts, AbsoluteExecutablePathMixin, MinimalPack
 # used as entry point to gui-script-test
 def nothing():
     pass
+
+
+def patch_buildout_wheel():
+    import buildout.wheel
+    import glob
+    WheelInstaller = buildout.wheel.WheelInstaller
+
+    def wrapper(func):
+        def wrapper(basename):
+            return WheelInstaller((glob.glob('{}*'.format(basename)) + [basename])[0])
+        return wrapper
+
+    buildout.wheel.WheelInstaller = wrapper(buildout.wheel.WheelInstaller)
+
+
+def _get_matching_dist_in_location(dist, location):
+    """
+    Check if `locations` contain only the one intended dist.
+    Return the dist with metadata in the new location.
+    """
+    # Getting the dist from the environment causes the
+    # distribution meta data to be read.  Cloning isn't
+    # good enough.
+    import pkg_resources
+    env = pkg_resources.Environment([location])
+    dists = [ d for project_name in env for d in env[project_name] ]
+    dist_infos = [ (d.project_name, d.version) for d in dists ]
+    if dist_infos == [(dist.project_name, dist.version)]:
+        return dists.pop()
+    if dist_infos == [(dist.project_name.lower(), dist.version)]:
+        return dists.pop()
+
+def patch_zc_buildout_easy_install():
+    import zc.buildout.easy_install
+    zc.buildout.easy_install._get_matching_dist_in_location = _get_matching_dist_in_location
+
+# buildout.wheel on Windows is having problems installing non-lower-case wheels
+try:
+    patch_buildout_wheel()
+except ImportError:
+    pass
+
+patch_zc_buildout_easy_install()
