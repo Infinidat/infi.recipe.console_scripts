@@ -1,6 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
 #include <sys/stat.h>
 #include <windows.h>
+#include <shlwapi.h>
 
 /* For Py_GetArgcArgv(); set by main() */
 static char** orig_argv;
@@ -20,9 +23,9 @@ typedef void* PyObject;
 
 /* List of functions we'll get from the DLL - see load_python_library() */
 void (*__PySys_ResetWarnOptions)(void);
-void (*__PySys_SetArgv)(int, char**);
-void (*__Py_SetProgramName)(char*);
-void (*__Py_SetPythonHome)(char*);
+void (*__PySys_SetArgv)(int, wchar_t**);
+void (*__Py_SetProgramName)(wchar_t*);
+void (*__Py_SetPythonHome)(wchar_t*);
 void (*__Py_Initialize)(void);
 void (*__Py_Finalize)(void);
 void (*__PyErr_Print)(void);
@@ -30,8 +33,9 @@ int (*__Py_MakePendingCalls)(void);
 int (*__PyModule_AddStringConstant)(PyObject*, const char*, const char*);
 int (*__PySys_SetObject)(char* name, PyObject* v);
 PyObject* (*__PyImport_AddModule)(const char*);
-PyObject* (*__PyString_FromString)(const char*);
+PyObject* (*__PyUnicode_FromString)(const char*);
 int (*__PyRun_SimpleString)(const char*);
+void (*__Py_SetPath)(const wchar_t *);
 
 void error(const char* fmt, ...){
     va_list args;
@@ -275,12 +279,13 @@ void load_python_library(const char* python_home) {
     SET_DLL_FUNC(Py_SetPythonHome);
     SET_DLL_FUNC(Py_Initialize);
     SET_DLL_FUNC(Py_Finalize);
+    SET_DLL_FUNC(Py_SetPath);
     SET_DLL_FUNC(Py_MakePendingCalls);
     SET_DLL_FUNC(PyModule_AddStringConstant);
     SET_DLL_FUNC(PyImport_AddModule);
     SET_DLL_FUNC(PyRun_SimpleString);
-    SET_DLL_FUNC(PyString_FromString);
     SET_DLL_FUNC(PySys_SetObject);
+    SET_DLL_FUNC(PyUnicode_FromString);
 
     /* We keep a reference to the DLL open, so it won't get removed. */
 }
@@ -295,28 +300,38 @@ int main(int argc, char **argv) {
     char* python_home = NULL;
     char* python_exe = NULL;
     char* file_buffer = NULL;
+    wchar_t python_home_w[MAX_PATH];
+    wchar_t python_lib_path_w[MAX_PATH];
+    wchar_t** argv_w = NULL;
 
     orig_argc = argc;           /* For Py_GetArgcArgv() */
     orig_argv = argv;
+
+    argv_w = CommandLineToArgvW(GetCommandLineW(), &argc);
 
     filename = create_script_file_path_from_executable();
     file_buffer = read_file(filename);
     python_home = find_python_home_from_shebang(filename, file_buffer);
     python_exe = get_python_exe(python_home);
+    mbstowcs(python_home_w, python_home, MAX_PATH);
 
     load_python_library(python_home);
 
     (*__PySys_ResetWarnOptions)();
 
-    (*__Py_SetProgramName)(argv[0]);
+    /* call Py_SetPath */
+    wcsncpy(python_lib_path_w, python_home_w, MAX_PATH);
+    wcsncat(python_lib_path_w, L"\\lib", MAX_PATH);
+    (*__Py_SetPath)(python_lib_path_w);
 
-    (*__Py_SetPythonHome)(python_home);
-    /* We're deliberately not freeing python_home - it's needed during the execution of the script */
+    (*__Py_SetProgramName)(argv_w[0]);
+
+    (*__Py_SetPythonHome)(python_home_w);
 
     (*__Py_Initialize)();
 
-    (*__PySys_SetArgv)(argc, argv);
-    (*__PySys_SetObject)("executable", (*__PyString_FromString)(python_exe));
+    (*__PySys_SetArgv)(argc, argv_w);
+    (*__PySys_SetObject)("executable", (*__PyUnicode_FromString)(python_exe));
 
     /* call pending calls like signal handlers (SIGINT) */
     if ((*__Py_MakePendingCalls)() == -1) {
