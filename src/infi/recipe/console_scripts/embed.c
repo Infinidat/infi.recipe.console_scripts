@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <windows.h>
 
@@ -233,33 +235,22 @@ void find_dll_function(HMODULE handle, const char* func_name, void** addr) {
     *addr = (void*) proc;
 }
 
-#define PYTHON_DLL_PATH_PART "\\bin\\python*.dll"
+#define PYTHON_DLL_PATH_PART "/bin/python27.dll"
 #define PYTHON_EXE_PATH_PART "\\bin\\python.exe"
 
 char* get_python_exe(const char* python_home) {
-    char *python_exe_path = myalloc("python exe", MAX_PATH);
-    strncpy(python_exe_path, python_home, MAX_PATH);
-    strncat(python_exe_path, PYTHON_EXE_PATH_PART, MAX_PATH);
+    char python_exe_path[MAX_PATH];
+    strcpy(python_exe_path, python_home);
+    strcat(python_exe_path, PYTHON_EXE_PATH_PART);
     return python_exe_path;
 }
 
 void load_python_library(const char* python_home) {
     HMODULE module;
-    HANDLE find_handle;
-    WIN32_FIND_DATA find_data;
     char python_dll_path[MAX_PATH];
 
     strcpy(python_dll_path, python_home);
     strcat(python_dll_path, PYTHON_DLL_PATH_PART);
-
-    find_handle = FindFirstFile(python_dll_path, &find_data);
-    if (find_handle == INVALID_HANDLE_VALUE) {
-        win32_error("error finding python DLL from '%s'", python_dll_path);
-    }
-    strcpy(python_dll_path, python_home);
-    strcat(python_dll_path, "\\bin\\");
-    strcat(python_dll_path, find_data.cFileName);
-    FindClose(find_handle);
 
     module = LoadLibrary(python_dll_path);
     if (module == NULL) {
@@ -293,16 +284,16 @@ int main(int argc, char **argv) {
     int sts;
     char* filename = NULL;
     char* python_home = NULL;
-    char* python_exe = NULL;
     char* file_buffer = NULL;
 
     orig_argc = argc;           /* For Py_GetArgcArgv() */
     orig_argv = argv;
 
     filename = create_script_file_path_from_executable();
+
     file_buffer = read_file(filename);
+
     python_home = find_python_home_from_shebang(filename, file_buffer);
-    python_exe = get_python_exe(python_home);
 
     load_python_library(python_home);
 
@@ -316,7 +307,7 @@ int main(int argc, char **argv) {
     (*__Py_Initialize)();
 
     (*__PySys_SetArgv)(argc, argv);
-    (*__PySys_SetObject)("executable", (*__PyString_FromString)(python_exe));
+    (*__PySys_SetObject)("executable", (*__PyString_FromString)(get_python_exe(python_home)));
 
     /* call pending calls like signal handlers (SIGINT) */
     if ((*__Py_MakePendingCalls)() == -1) {
@@ -335,7 +326,6 @@ int main(int argc, char **argv) {
     (*__Py_Finalize)();
 
     free(python_home);
-    free(python_exe);
     free(file_buffer);
     free(filename);
 
