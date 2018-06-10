@@ -1,6 +1,6 @@
 from pkg_resources import resource_stream, resource_filename
 import shutil
-
+import subprocess
 import sys
 import os
 is_windows = os.name == 'nt'
@@ -11,6 +11,8 @@ arch = 'x64' if is_64 else 'x86'
 try:
     embedded_launcher = resource_stream(__name__, 'embed-{}.exe'.format(arch)).read()
     embedded_gui_launcher = resource_stream(__name__, 'embed-gui-{}.exe'.format(arch)).read()
+    embedded3_launcher = resource_stream(__name__, 'embed3-{}.exe'.format(arch)).read()
+    embedded3_gui_launcher = resource_stream(__name__, 'embed3-gui-{}.exe'.format(arch)).read()
 except IOError:
     # https://bitbucket.org/pypa/setuptools/issue/1/disable-installation-of-windows-specific
     pass
@@ -72,9 +74,11 @@ def executable_filter(filepath):
 
 class WindowsWorkaround(object):
     @classmethod
-    def _replace_launcher(cls, filepath, gui=False):
+    def _replace_launcher(cls, filepath, gui=False, is_py3=False):
+        launcher = ((embedded_gui_launcher if gui else embedded_launcher) if not is_py3 else
+                    (embedded3_gui_launcher if gui else embedded3_launcher))
         with open(filepath, 'wb') as fd:
-            fd.write(embedded_gui_launcher if gui else embedded_launcher)
+            fd.write(launcher)
 
     @classmethod
     def _write_manifest(cls, filepath, with_vc90=True, with_uac=True):
@@ -93,13 +97,27 @@ class WindowsWorkaround(object):
                 shutil.copy(src, dst)
 
     @classmethod
+    def is_py3(cls, recipe):
+        # the launchers load Python functions from the dll and so they're different for Python 2 and 3.
+        # try to run the Python executable to see if we're dealing with 2 or 3.
+        python_executable = recipe.buildout.get('buildout').get('executable')
+        try:
+            py_process = subprocess.Popen([python_executable, '--version'],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError:
+            return False
+        if py_process.wait() != 0:
+            return False
+        return py_process.stderr.read().startswith("Python 3")
+
+    @classmethod
     def apply(cls, recipe, gui, installed_files):
         require_administrative_privileges = recipe.options.get('require-administrative-privileges', 'false')
         with_uac = require_administrative_privileges in (True, "true")
         if not is_windows:
             return
         for filepath in filter(executable_filter, installed_files):
-            cls._replace_launcher(filepath, gui)
+            cls._replace_launcher(filepath, gui, cls.is_py3(recipe))
             cls._write_manifest('{}.manifest'.format(filepath), with_uac=with_uac)
             cls._write_vc90_crt_private_assembly(os.path.dirname(filepath))
 
