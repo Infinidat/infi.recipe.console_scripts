@@ -112,7 +112,7 @@ class WindowsWorkaround(object):
             return False
         if py_process.wait() != 0:
             return False
-        return py_process.stderr.read().startswith("Python 3")
+        return py_process.stderr.read().startswith(b"Python 3")
 
     @classmethod
     def apply(cls, recipe, gui, installed_files):
