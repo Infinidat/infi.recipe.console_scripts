@@ -35,7 +35,6 @@ int (*__PySys_SetObject)(char* name, PyObject* v);
 PyObject* (*__PyImport_AddModule)(const char*);
 PyObject* (*__PyUnicode_FromString)(const char*);
 int (*__PyRun_SimpleString)(const char*);
-void (*__Py_SetPath)(const wchar_t *);
 
 void error(const char* fmt, ...){
     va_list args;
@@ -279,7 +278,6 @@ void load_python_library(const char* python_home) {
     SET_DLL_FUNC(Py_SetPythonHome);
     SET_DLL_FUNC(Py_Initialize);
     SET_DLL_FUNC(Py_Finalize);
-    SET_DLL_FUNC(Py_SetPath);
     SET_DLL_FUNC(Py_MakePendingCalls);
     SET_DLL_FUNC(PyModule_AddStringConstant);
     SET_DLL_FUNC(PyImport_AddModule);
@@ -318,11 +316,6 @@ int main(int argc, char **argv) {
     load_python_library(python_home);
 
     (*__PySys_ResetWarnOptions)();
-
-    /* call Py_SetPath */
-    wcsncpy(python_lib_path_w, python_home_w, MAX_PATH);
-    wcsncat(python_lib_path_w, L"\\lib", MAX_PATH);
-    (*__Py_SetPath)(python_lib_path_w);
 
     (*__Py_SetProgramName)(argv_w[0]);
 
