@@ -100,11 +100,11 @@ class WindowsWorkaround(object):
     def is_py3(cls, recipe):
         # the launchers load Python functions from the dll and so they're different for Python 2 and 3.
         # try to run the Python executable to see if we're dealing with 2 or 3.
-        if not hasattr(recipe, 'options'):
-            # replace_console_script entry point uses CommandlineWorkaround which doesn't have the buildout object
+        python_executable = recipe.options.get('executable')
+        if not python_executable:
+            # replace_console_script entry point uses CommandlineWorkaround which doesn't have all the options.
             # we fall back to Python 2 (legacy) behavior. In the future we may change this or add a script for Py3
             return False
-        python_executable = recipe.options['executable']
         try:
             py_process = subprocess.Popen([python_executable, '--version'],
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
