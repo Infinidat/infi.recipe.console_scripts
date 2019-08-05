@@ -6,6 +6,13 @@ is_windows = os.name == 'nt'
 # Only if this will fail (with ImportError, as there will be missing packages), it will continue with a normal run
 MINIMAL_PACKAGES_SECTION_TEMPLATE = """
 import pkg_resources
+try:
+    reload  # Python 2.7
+except NameError:
+    try:
+        from importlib import reload  # Python 3.4+
+    except ImportError:
+        from imp import reload  # Python 3.0 - 3.3
 
 sys.path[0:0] = [
 {sys_path_lines}
