@@ -288,6 +288,18 @@ void load_python_library(const char* python_home) {
     /* We keep a reference to the DLL open, so it won't get removed. */
 }
 
+void fix_dll_search_path(wchar_t* python_home_w) {
+    /* Python 3.8 calls LoadLibraryEx with LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
+     * which means it also uses LOAD_LIBRARY_SEARCH_USER_DIRS which are
+     * directories added by AddDllDirectory. The CRT binaries are currently
+     * copied into the bin directory of the actual Python executable which
+     * means we need to search there */
+    wchar_t python_bin_path_w[MAX_PATH];
+    wcsncpy(python_bin_path_w, python_home_w, MAX_PATH);
+    wcsncat(python_bin_path_w, L"\\bin", MAX_PATH);
+    AddDllDirectory(python_bin_path_w);
+}
+
 int WINAPI WinMain(HINSTANCE hI, HINSTANCE hP, LPSTR lpCmd, int nShow) {
     return main(__argc, __argv);
 }
@@ -299,7 +311,6 @@ int main(int argc, char **argv) {
     char* python_exe = NULL;
     char* file_buffer = NULL;
     wchar_t python_home_w[MAX_PATH];
-    wchar_t python_lib_path_w[MAX_PATH];
     wchar_t** argv_w = NULL;
 
     orig_argc = argc;           /* For Py_GetArgcArgv() */
@@ -314,6 +325,8 @@ int main(int argc, char **argv) {
     mbstowcs(python_home_w, python_home, MAX_PATH);
 
     load_python_library(python_home);
+
+    fix_dll_search_path(python_home_w);
 
     (*__PySys_ResetWarnOptions)();
 
