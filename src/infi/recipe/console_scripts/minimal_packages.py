@@ -19,11 +19,11 @@ sys.path[0:0] = [
   ]
 
 if __name__ == '__main__':
-  try:
-    {import_line}
-{sys_exit_line}
-  except ImportError:
-    pass
+    try:
+        {import_line}
+    {sys_exit_line}
+    except (ImportError, pkg_resources.DistributionNotFound):
+        pass
 
 """
 
