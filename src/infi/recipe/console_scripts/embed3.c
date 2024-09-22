@@ -259,15 +259,17 @@ void load_python_library(const char* python_home) {
     if (find_handle == INVALID_HANDLE_VALUE) {
         win32_error("error finding python DLL from '%s'", python_dll_path);
     }
-    strcpy(python_dll_path, python_home);
-    strcat(python_dll_path, "\\bin\\");
-    strcat(python_dll_path, find_data.cFileName);
-    FindClose(find_handle);
+    do {
+        strcpy(python_dll_path, python_home);
+        strcat(python_dll_path, "\\bin\\");
+        strcat(python_dll_path, find_data.cFileName);
+        module = LoadLibrary(python_dll_path);
+        if (module == NULL) {
+            win32_error("error loading python DLL from '%s'", python_dll_path);
+        }
+    } while (FindNextFile(find_handle, &find_data) != 0);
 
-    module = LoadLibrary(python_dll_path);
-    if (module == NULL) {
-        win32_error("error loading python DLL from '%s'", python_dll_path);
-    }
+    FindClose(find_handle);
 
 #   define SET_DLL_FUNC(func) find_dll_function(module, #func, (void**) &__##func)
 
