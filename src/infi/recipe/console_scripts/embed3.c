@@ -1,5 +1,11 @@
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
 #include <wchar.h>
 #include <sys/stat.h>
 #include <windows.h>
@@ -111,7 +117,8 @@ error:
 
 char* read_file(const char* filename) {
     struct stat sb;
-    long file_size, bytes_read;
+    long file_size;
+    size_t bytes_read;
     char* buf;
     FILE* fp;
 
@@ -120,17 +127,17 @@ char* read_file(const char* filename) {
     }
 
     /* XXX: does this work on Win/Win64? (see posix_fstat) */
-    if (fstat(fileno(fp), &sb) == 0 && S_ISDIR(sb.st_mode)) {
-        error("'%s' is a directory, cannot continue");
+    if (fstat(_fileno(fp), &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        error("'%s' is a directory, cannot continue", filename);
     }
 
     file_size = get_file_size(fp);
 
-    buf = (char*) myalloc("file buffer", file_size + 1);
+    buf = (char*) myalloc("file buffer", (size_t) file_size + 1);
 
-    bytes_read = fread(buf, 1, file_size, fp);
-    if (bytes_read != file_size) {
-        error("read error from file '%s', read %ld bytes out of %ld", filename, bytes_read, file_size);
+    bytes_read = fread(buf, 1, (size_t) file_size, fp);
+    if (bytes_read != (size_t) file_size) {
+        error("read error from file '%s', read %zu bytes out of %ld", filename, bytes_read, file_size);
     }
     buf[bytes_read] = 0;
 
@@ -139,15 +146,22 @@ char* read_file(const char* filename) {
     return buf;
 }
 
-char* create_script_file_path_from_executable() {
+char* create_script_file_path_from_executable(void) {
 #   define PYTHON_SCRIPT_SUFFIX "-script.py"
-    long prefix_len;
+    size_t prefix_len;
     char* script_file_path;
     const char* ext_ptr;
     char filename[MAX_PATH];
-    int filename_size;
+    DWORD filename_size;
+
     filename_size = GetModuleFileNameA(NULL, filename, MAX_PATH);
-    filename[filename_size]='\x00';
+    if (filename_size == 0) {
+        win32_error("failed to get launcher filename");
+    }
+    if (filename_size >= MAX_PATH) {
+        error("launcher filename is too long");
+    }
+    filename[filename_size] = '\x00';
 
     ext_ptr = strrchr(filename, '.');
     if (ext_ptr == NULL) {
@@ -155,7 +169,7 @@ char* create_script_file_path_from_executable() {
         ext_ptr = filename + strlen(filename);
     }
 
-    prefix_len = ext_ptr - filename;
+    prefix_len = (size_t) (ext_ptr - filename);
     script_file_path = (char*) myalloc("script file name", prefix_len + strlen(PYTHON_SCRIPT_SUFFIX) + 1);
     strncpy(script_file_path, filename, prefix_len);
     script_file_path[prefix_len] = '\x00';
@@ -236,40 +250,117 @@ void find_dll_function(HMODULE handle, const char* func_name, void** addr) {
     *addr = (void*) proc;
 }
 
-#define PYTHON_DLL_PATH_PART "\\bin\\python*.dll"
+#define PYTHON_DLL_GLOB "\\bin\\python3*.dll"
 #define PYTHON_EXE_PATH_PART "\\bin\\python.exe"
 
 char* get_python_exe(const char* python_home) {
     char *python_exe_path = myalloc("python exe", MAX_PATH);
-    strncpy(python_exe_path, python_home, MAX_PATH);
-    strncat(python_exe_path, PYTHON_EXE_PATH_PART, MAX_PATH);
+    int path_length = snprintf(
+        python_exe_path,
+        MAX_PATH,
+        "%s%s",
+        python_home,
+        PYTHON_EXE_PATH_PART
+    );
+
+    if (path_length < 0 || path_length >= MAX_PATH) {
+        error("Python executable path is too long");
+    }
+
     return python_exe_path;
 }
 
+int is_versioned_python_dll(const char* filename) {
+    const char* cursor;
+    const char prefix[] = "python3";
+    const size_t prefix_length = sizeof(prefix) - 1;
+
+    if (_strnicmp(filename, prefix, prefix_length) != 0) {
+        return 0;
+    }
+
+    cursor = filename + prefix_length;
+    if (!isdigit((unsigned char) *cursor)) {
+        /* Excludes the stable-ABI forwarding DLL: python3.dll. */
+        return 0;
+    }
+
+    while (isdigit((unsigned char) *cursor)) {
+        cursor++;
+    }
+
+    return _stricmp(cursor, ".dll") == 0;
+}
+
 void load_python_library(const char* python_home) {
-    HMODULE module;
+    HMODULE module = NULL;
     HANDLE find_handle;
     WIN32_FIND_DATA find_data;
+    char python_dll_glob[MAX_PATH];
     char python_dll_path[MAX_PATH];
+    char python_dll_full_path[MAX_PATH];
+    char python_dll_name[MAX_PATH] = "";
+    DWORD full_path_length;
+    int path_length;
+    int versioned_dll_count = 0;
 
-    strcpy(python_dll_path, python_home);
-    strcat(python_dll_path, PYTHON_DLL_PATH_PART);
-
-    find_handle = FindFirstFile(python_dll_path, &find_data);
-    if (find_handle == INVALID_HANDLE_VALUE) {
-        win32_error("error finding python DLL from '%s'", python_dll_path);
+    path_length = snprintf(python_dll_glob, MAX_PATH, "%s%s", python_home, PYTHON_DLL_GLOB);
+    if (path_length < 0 || path_length >= MAX_PATH) {
+        error("python DLL search path is too long");
     }
+
+    find_handle = FindFirstFile(python_dll_glob, &find_data);
+    if (find_handle == INVALID_HANDLE_VALUE) {
+        win32_error("error finding python DLL from '%s'", python_dll_glob);
+    }
+
     do {
-        strcpy(python_dll_path, python_home);
-        strcat(python_dll_path, "\\bin\\");
-        strcat(python_dll_path, find_data.cFileName);
-        module = LoadLibrary(python_dll_path);
-        if (module == NULL) {
-            win32_error("error loading python DLL from '%s'", python_dll_path);
+        if (!is_versioned_python_dll(find_data.cFileName)) {
+            continue;
         }
+
+        versioned_dll_count++;
+        if (versioned_dll_count > 1) {
+            FindClose(find_handle);
+            error("multiple versioned Python DLLs found in '%s\\bin'", python_home);
+        }
+
+        strcpy(python_dll_name, find_data.cFileName);
     } while (FindNextFile(find_handle, &find_data) != 0);
 
     FindClose(find_handle);
+
+    if (versioned_dll_count == 0) {
+        error("no versioned Python DLL found in '%s\\bin'", python_home);
+    }
+
+    path_length = snprintf(python_dll_path, MAX_PATH, "%s\\bin\\%s", python_home, python_dll_name);
+    if (path_length < 0 || path_length >= MAX_PATH) {
+        error("python DLL path is too long");
+    }
+
+    full_path_length = GetFullPathNameA(
+        python_dll_path,
+        MAX_PATH,
+        python_dll_full_path,
+        NULL
+    );
+    if (full_path_length == 0) {
+        win32_error("failed to resolve Python DLL path '%s'", python_dll_path);
+    }
+    if (full_path_length >= MAX_PATH) {
+        error("absolute Python DLL path is too long");
+    }
+
+    module = LoadLibraryExA(
+        python_dll_full_path,
+        NULL,
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
+    );
+    if (module == NULL) {
+        win32_error("error loading python DLL from '%s'", python_dll_full_path);
+    }
 
 #   define SET_DLL_FUNC(func) find_dll_function(module, #func, (void**) &__##func)
 
@@ -297,10 +388,36 @@ void fix_dll_search_path(wchar_t* python_home_w) {
      * copied into the bin directory of the actual Python executable which
      * means we need to search there */
     wchar_t python_bin_path_w[MAX_PATH];
-    wcsncpy(python_bin_path_w, python_home_w, MAX_PATH);
-    wcsncat(python_bin_path_w, L"\\bin", MAX_PATH);
-    AddDllDirectory(python_bin_path_w);
+    wchar_t python_bin_full_path_w[MAX_PATH];
+    const wchar_t python_bin_suffix[] = L"\\bin";
+    DWORD full_path_length;
+
+    if (wcslen(python_home_w) + wcslen(python_bin_suffix) + 1 > MAX_PATH) {
+        error("Python bin directory path is too long");
+    }
+
+    wcscpy(python_bin_path_w, python_home_w);
+    wcscat(python_bin_path_w, python_bin_suffix);
+
+    full_path_length = GetFullPathNameW(
+        python_bin_path_w,
+        MAX_PATH,
+        python_bin_full_path_w,
+        NULL
+    );
+    if (full_path_length == 0) {
+        win32_error("failed to resolve Python bin directory path");
+    }
+    if (full_path_length >= MAX_PATH) {
+        error("absolute Python bin directory path is too long");
+    }
+
+    if (AddDllDirectory(python_bin_full_path_w) == NULL) {
+        win32_error("failed to add Python bin directory to DLL search path");
+    }
 }
+
+int main(int argc, char **argv);
 
 int WINAPI WinMain(HINSTANCE hI, HINSTANCE hP, LPSTR lpCmd, int nShow) {
     return main(__argc, __argv);
@@ -314,6 +431,7 @@ int main(int argc, char **argv) {
     char* file_buffer = NULL;
     wchar_t python_home_w[MAX_PATH];
     wchar_t** argv_w = NULL;
+    size_t python_home_w_length;
 
     orig_argc = argc;           /* For Py_GetArgcArgv() */
     orig_argv = argv;
@@ -324,11 +442,18 @@ int main(int argc, char **argv) {
     file_buffer = read_file(filename);
     python_home = find_python_home_from_shebang(filename, file_buffer);
     python_exe = get_python_exe(python_home);
-    mbstowcs(python_home_w, python_home, MAX_PATH);
-
-    load_python_library(python_home);
+    python_home_w_length = mbstowcs(python_home_w, python_home, MAX_PATH);
+    if (python_home_w_length == (size_t) -1) {
+        error("failed to convert Python home path to Unicode");
+    }
+    if (python_home_w_length >= MAX_PATH) {
+        error("Python home path is too long");
+    }
+    python_home_w[python_home_w_length] = L'\0';
 
     fix_dll_search_path(python_home_w);
+
+    load_python_library(python_home);
 
     (*__PySys_ResetWarnOptions)();
 
